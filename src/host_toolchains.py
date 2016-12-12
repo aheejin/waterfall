@@ -115,5 +115,8 @@ def CMakeFlags(platform):
     flags.extend(['-DCMAKE_C_COMPILER=' + CC,
                  '-DCMAKE_CXX_COMPILER=' + CXX])
   if platform == 'darwin':
+    # TODO(dschuff): Allow disabling dependence on downloaded toolchains
+    os.environ['FORCE_MAC_TOOLCHAIN'] = '1'
+    os.environ['DEVELOPER_DIR'] = os.path.join(CR_BUILD_DIR, 'mac_files', 'Xcode.app')
     flags.append('-DCMAKE_OSX_SYSROOT=%s' % MacToolchainSysroot())
   return flags
