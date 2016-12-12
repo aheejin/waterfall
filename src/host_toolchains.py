@@ -28,6 +28,7 @@ SETUP_TOOLCHAIN = os.path.join(CR_BUILD_DIR, 'toolchain', 'win',
 V8_SRC_DIR = os.path.join(WORK_DIR, 'v8', 'v8')
 VS_TOOLCHAIN = os.path.join(V8_SRC_DIR, 'gypfiles', 'vs_toolchain.py')
 WIN_TOOLCHAIN_JSON = os.path.join(V8_SRC_DIR, 'gypfiles', 'win_toolchain.json')
+MAC_TOOLCHAIN = os.path.join(CR_BUILD_DIR, 'mac_toolchain.py')
 
 os.environ['GYP_MSVS_VERSION'] = '2015'
 
@@ -89,3 +90,14 @@ def SetUpVSEnv(outdir):
 def CopyDlls(dir, configuration):
   """ Copy MSVS Runtime dlls into a build directory"""
   proc.check_call([VS_TOOLCHAIN, 'copy_dlls', dir, configuration, 'x64'])
+
+
+def SyncMacToolchain():
+    proc.check_call([MAC_TOOLCHAIN])
+    # XXX move this so that it runs even when the toolchain is not synced
+    #os.environ['DEVELOPER_DIR'] = os.path.join(CR_BUILD_DIR, 'mac_files', 'Xcode.app', 'contents', 'Developer')
+
+def MacToolchainSysroot():
+    return os.path.join(CR_BUILD_DIR, 'mac_files', 'Xcode.app', 'contents',
+                            'Developer', 'Platforms', 'MacOSX.platform',
+                            'Developer', 'SDKs', 'MacOSX10.10.sdk')

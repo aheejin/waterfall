@@ -421,6 +421,8 @@ def SyncToolchain(name, src_dir, git_repo):
     host_toolchains.SyncPrebuiltClang(name, src_dir, git_repo)
     assert os.path.isfile(CC), 'Expect clang at %s' % CC
     assert os.path.isfile(CXX), 'Expect clang++ at %s' % CXX
+  if sys.platform == 'darwin':
+    host_toolchains.SyncMacToolchain()
 
 
 def SyncArchive(out_dir, name, version, url):
@@ -724,6 +726,8 @@ def LLVM():
              '-DLLVM_TARGETS_TO_BUILD=X86']
 
   command.extend(OverrideCMakeCompiler())
+  if IsMac():
+    command.append('-DCMAKE_OSX_SYSROOT=%s' % host_toolchains.MacToolchainSysroot())
 
   jobs = []
   if 'GOMA_DIR' in os.environ:
@@ -776,11 +780,13 @@ def Wabt():
     # TODO(dschuff): Figure out how to make this statically linked?
     host_toolchains.CopyDlls(INSTALL_BIN, 'Release')
 
-  proc.check_call([PREBUILT_CMAKE_BIN, '-G', 'Ninja', WABT_SRC_DIR,
-                   '-DCMAKE_BUILD_TYPE=Release',
-                   '-DCMAKE_INSTALL_PREFIX=%s' % INSTALL_DIR,
-                   '-DBUILD_TESTS=OFF'] + OverrideCMakeCompiler(),
-                  cwd=WABT_OUT_DIR, env=cc_env)
+  cmd = [PREBUILT_CMAKE_BIN, '-G', 'Ninja', WABT_SRC_DIR,
+         '-DCMAKE_BUILD_TYPE=Release',
+         '-DCMAKE_INSTALL_PREFIX=%s' % INSTALL_DIR,
+           '-DBUILD_TESTS=OFF'] + OverrideCMakeCompiler()
+  if IsMac():
+    cmd.append('-DCMAKE_OSX_SYSROOT=%s' % host_toolchains.MacToolchainSysroot())
+  proc.check_call(cmd, cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja'], cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja', 'install'], cwd=WABT_OUT_DIR, env=cc_env)
 
