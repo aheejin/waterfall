@@ -63,12 +63,6 @@ MUSL_SRC_DIR = os.path.join(WORK_DIR, 'musl')
 
 FIND_SVN_REV = os.path.join(SCRIPT_DIR, 'find_svn_rev.py')
 
-PREBUILT_CLANG = os.path.join(WORK_DIR, 'chromium-clang')
-PREBUILT_CLANG_TOOLS_CLANG = os.path.join(PREBUILT_CLANG, 'tools', 'clang')
-PREBUILT_CLANG_BIN = os.path.join(
-    PREBUILT_CLANG, 'third_party', 'llvm-build', 'Release+Asserts', 'bin')
-CC = os.path.join(PREBUILT_CLANG_BIN, 'clang')
-CXX = os.path.join(PREBUILT_CLANG_BIN, 'clang++')
 
 PREBUILT_CMAKE_DIR = os.path.join(WORK_DIR, 'cmake343')
 PREBUILT_CMAKE_BIN = os.path.join(PREBUILT_CMAKE_DIR, 'bin', 'cmake')
@@ -419,8 +413,6 @@ def SyncToolchain(name, src_dir, git_repo):
     host_toolchains.SyncWinToolchain()
   else:
     host_toolchains.SyncPrebuiltClang(name, src_dir, git_repo)
-    assert os.path.isfile(CC), 'Expect clang at %s' % CC
-    assert os.path.isfile(CXX), 'Expect clang++ at %s' % CXX
   if sys.platform == 'darwin':
     host_toolchains.SyncMacToolchain()
 
@@ -516,7 +508,7 @@ ALL_SOURCES = [
     Source('v8', V8_SRC_DIR,
            GIT_MIRROR_BASE + 'v8/v8',
            custom_sync=ChromiumFetchSync),
-    Source('host-toolchain', PREBUILT_CLANG,
+    Source('host-toolchain', host_toolchains.PREBUILT_CLANG,
            GIT_MIRROR_BASE + 'chromium/src/tools/clang',
            custom_sync=SyncToolchain),
     Source('cr-buildtools', os.path.join(WORK_DIR, 'build'),
@@ -683,13 +675,6 @@ def GetRepoInfo():
 
 # Build rules
 
-def OverrideCMakeCompiler():
-  if IsWindows():
-    return []
-  return ['-DCMAKE_C_COMPILER=' + CC,
-          '-DCMAKE_CXX_COMPILER=' + CXX]
-
-
 def CopyLLVMTools(build_dir, prefix=''):
   # The following isn't useful for now, and takes up space.
   Remove(os.path.join(INSTALL_DIR, prefix, 'bin', 'clang-check'))
@@ -725,9 +710,7 @@ def LLVM():
              '-DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=WebAssembly',
              '-DLLVM_TARGETS_TO_BUILD=X86']
 
-  command.extend(OverrideCMakeCompiler())
-  if IsMac():
-    command.append('-DCMAKE_OSX_SYSROOT=%s' % host_toolchains.MacToolchainSysroot())
+  command.extend(host_toolchains.CMakeFlags(sys.platform))
 
   jobs = []
   if 'GOMA_DIR' in os.environ:
@@ -783,9 +766,7 @@ def Wabt():
   cmd = [PREBUILT_CMAKE_BIN, '-G', 'Ninja', WABT_SRC_DIR,
          '-DCMAKE_BUILD_TYPE=Release',
          '-DCMAKE_INSTALL_PREFIX=%s' % INSTALL_DIR,
-           '-DBUILD_TESTS=OFF'] + OverrideCMakeCompiler()
-  if IsMac():
-    cmd.append('-DCMAKE_OSX_SYSROOT=%s' % host_toolchains.MacToolchainSysroot())
+           '-DBUILD_TESTS=OFF'] + host_toolchains.CMakeFlags(sys.platform)
   proc.check_call(cmd, cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja'], cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja', 'install'], cwd=WABT_OUT_DIR, env=cc_env)
@@ -796,7 +777,7 @@ def OCaml():
   makefile = os.path.join(OCAML_DIR, 'config', 'Makefile')
   if not os.path.isfile(makefile):
     configure = os.path.join(OCAML_DIR, 'configure')
-    cc_flag = ['-cc', CC] if sys.platform != 'darwin' else []
+    cc_flag = ['-cc', host_toolchains.CC] if sys.platform != 'darwin' else []
     proc.check_call(
         [configure, '-prefix', OCAML_OUT_DIR] + cc_flag, cwd=OCAML_DIR)
   proc.check_call(['make', 'world.opt', '-j%s' % NPROC], cwd=OCAML_DIR)
@@ -828,7 +809,7 @@ def Binaryen():
     host_toolchains.CopyDlls(INSTALL_BIN, 'Debug')
   proc.check_call(
       [PREBUILT_CMAKE_BIN, '-G', 'Ninja', BINARYEN_SRC_DIR,
-       '-DCMAKE_INSTALL_PREFIX=%s' % INSTALL_DIR] + OverrideCMakeCompiler(),
+       '-DCMAKE_INSTALL_PREFIX=%s' % INSTALL_DIR] + host_toolchains.CMakeFlags(sys.platform),
       cwd=BINARYEN_OUT_DIR, env=cc_env)
   proc.check_call(['ninja'], cwd=BINARYEN_OUT_DIR, env=cc_env)
   proc.check_call(['ninja', 'install'], cwd=BINARYEN_OUT_DIR, env=cc_env)

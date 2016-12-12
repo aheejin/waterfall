@@ -30,6 +30,13 @@ VS_TOOLCHAIN = os.path.join(V8_SRC_DIR, 'gypfiles', 'vs_toolchain.py')
 WIN_TOOLCHAIN_JSON = os.path.join(V8_SRC_DIR, 'gypfiles', 'win_toolchain.json')
 MAC_TOOLCHAIN = os.path.join(CR_BUILD_DIR, 'mac_toolchain.py')
 
+PREBUILT_CLANG = os.path.join(WORK_DIR, 'chromium-clang')
+PREBUILT_CLANG_TOOLS_CLANG = os.path.join(PREBUILT_CLANG, 'tools', 'clang')
+PREBUILT_CLANG_BIN = os.path.join(
+    PREBUILT_CLANG, 'third_party', 'llvm-build', 'Release+Asserts', 'bin')
+CC = os.path.join(PREBUILT_CLANG_BIN, 'clang')
+CXX = os.path.join(PREBUILT_CLANG_BIN, 'clang++')
+
 os.environ['GYP_MSVS_VERSION'] = '2015'
 
 
@@ -99,5 +106,14 @@ def SyncMacToolchain():
 
 def MacToolchainSysroot():
     return os.path.join(CR_BUILD_DIR, 'mac_files', 'Xcode.app', 'contents',
-                            'Developer', 'Platforms', 'MacOSX.platform',
-                            'Developer', 'SDKs', 'MacOSX10.10.sdk')
+                        'Developer', 'Platforms', 'MacOSX.platform',
+                        'Developer', 'SDKs', 'MacOSX10.10.sdk')
+
+def CMakeFlags(platform):
+  flags = []
+  if platform != 'win32':
+    flags.extend(['-DCMAKE_C_COMPILER=' + CC,
+                 '-DCMAKE_CXX_COMPILER=' + CXX])
+  if platform == 'darwin':
+    flags.append('-DCMAKE_OSX_SYSROOT=%s' % MacToolchainSysroot())
+  return flags
