@@ -741,8 +741,6 @@ def CopyLLVMTools(build_dir, prefix=''):
       CopyLibraryToArchive(os.path.join(build_dir, 'lib', e), prefix)
   if IsWindows():
     CopyBinaryToArchive(MINGW32MAKE_BIN, prefix)
-    #shutil.copy2(MINGW32MAKE_BIN, os.path.join(INSTALL_BIN)
-
 
 
 def BuildEnv(build_dir, bin_subdir=False, runtime='Release'):
@@ -1295,9 +1293,8 @@ def ExecuteEmscriptenTestSuite(name, config, outdir, warn_only):
   Mkdir(outdir)
   try:
     proc.check_call(
-      #[os.path.join(V8_SRC_DIR, 'third_party', 'cygwin', 'bin')],
         [os.path.join(INSTALL_DIR, 'emscripten', 'tests', 'runner.py'),
-         'binaryen2.test_zlib', '--em-config', config],
+         'binaryen2', '--em-config', config],
         cwd=outdir)
   except proc.CalledProcessError:
     buildbot.Fail(warn_only)
