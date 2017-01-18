@@ -24,6 +24,7 @@
 import subprocess
 import os
 import sys
+import buildplatform
 # Imports all of subprocess into the current namespace, effectively
 # re-exporting everything.
 from subprocess import * # flake8: noqa
@@ -56,6 +57,20 @@ def SpecialCases(cmd, cwd):
   if exe == 'git' or exe == 'gclient':
     return [Which(exe, cwd)] + cmd[1:]
   return cmd
+
+
+def CallWithUnixUtils(cmd, **kwargs):
+  if buildplatform.IsWindows():
+    return check_call(['git', 'bash'] + cmd, **kwargs)
+  else:
+    return check_call(cmd, **kwargs)
+
+  
+def CallWithExtraPath(paths, cmd, **kwargs):
+  env = os.environ.copy()
+  env['PATH'] = os.pathsep.join(paths)+ os.pathsep + env['PATH']
+  print 'PATH', env['PATH']
+  return check_call(cmd, env=env, **kwargs)
 
 
 # Now we can override any parts of subprocess we want, while leaving the rest.

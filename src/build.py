@@ -150,6 +150,8 @@ def NodePlatformName():
 NODE_BIN = Executable(os.path.join(WORK_DIR,
                                    NODE_BASE_NAME + NodePlatformName(),
                                    'bin', 'node'))
+MINGW32MAKE_DIR = os.path.join(WORK_DIR, 'mingw32-make')
+MINGW32MAKE_BIN = os.path.join(MINGW32MAKE_DIR, 'mingw32-make.exe')
 
 # Known failures.
 IT_IS_KNOWN = 'known_gcc_test_failures.txt'
@@ -500,34 +502,18 @@ def SyncOCaml(name, src_dir, git_repo):
   return SyncArchive(src_dir, 'OCaml', OCAML_VERSION, OCAML_URL)
 
 
-def SyncWindowsNode():
-  if os.path.isfile(NODE_BIN):
-    print NODE_BIN, 'already exists'
-    return
-  Mkdir(os.path.dirname(NODE_BIN))
-  node_url = WASM_STORAGE_BASE + 'node.exe'
-  print 'Downloading node.js %s from %s' % (NODE_VERSION, node_url)
-  try:
-    f = urllib2.urlopen(node_url)
-    print 'URL: %s' % f.geturl()
-    print 'Info: %s' % f.info()
-    with open(NODE_BIN, 'wb') as n:
-      n.write(f.read())
-  except urllib2.URLError as e:
-    print 'Error downloading %s: %s' % (node_url, e)
-    raise
-  return
-
-
 def SyncPrebuiltNodeJS(name, src_dir, git_repo):
-  if IsWindows():
-    return SyncWindowsNode()
-  extension = {'darwin': 'gz', 'linux2': 'xz'}[sys.platform]
+  extension = {'darwin': 'tar.gz', 'linux2': 'tar.xz', 'win32': 'zip'}[sys.platform]
   out_dir = os.path.join(WORK_DIR, NODE_BASE_NAME + NodePlatformName())
-  tarball = NODE_BASE_NAME + NodePlatformName() + '.tar.' + extension
+  tarball = NODE_BASE_NAME + NodePlatformName() + '.' + extension
   node_url = WASM_STORAGE_BASE + tarball
   return SyncArchive(out_dir, name, NODE_VERSION, node_url)
 
+
+def SyncMingw32Make(name, src_dir, git_repo):
+  if not IsWindows():
+    return
+  return SyncArchive(MINGW32MAKE_DIR, 'mingw32-make', '4.1', WASM_STORAGE_BASE + 'mingw32-make.zip')
 
 def NoSync(*args):
   pass
@@ -570,6 +556,7 @@ ALL_SOURCES = [
            custom_sync=SyncPrebuiltCMake),
     Source('nodejs', '', '',  # The source and git args are ignored.
            custom_sync=SyncPrebuiltNodeJS),
+    Source('mingw32-make', '', '', custom_sync=SyncMingw32Make),
     Source('wabt', WABT_SRC_DIR,
            WASM_GIT_BASE + 'wabt.git'),
     Source('spec', SPEC_SRC_DIR,
@@ -752,6 +739,10 @@ def CopyLLVMTools(build_dir, prefix=''):
             extra_libs]:
     for e in p:
       CopyLibraryToArchive(os.path.join(build_dir, 'lib', e), prefix)
+  if IsWindows():
+    CopyBinaryToArchive(MINGW32MAKE_BIN, prefix)
+    #shutil.copy2(MINGW32MAKE_BIN, os.path.join(INSTALL_BIN)
+
 
 
 def BuildEnv(build_dir, bin_subdir=False, runtime='Release'):
@@ -1304,8 +1295,9 @@ def ExecuteEmscriptenTestSuite(name, config, outdir, warn_only):
   Mkdir(outdir)
   try:
     proc.check_call(
+      #[os.path.join(V8_SRC_DIR, 'third_party', 'cygwin', 'bin')],
         [os.path.join(INSTALL_DIR, 'emscripten', 'tests', 'runner.py'),
-         'binaryen2', '--em-config', config],
+         'binaryen2.test_zlib', '--em-config', config],
         cwd=outdir)
   except proc.CalledProcessError:
     buildbot.Fail(warn_only)
@@ -1331,8 +1323,8 @@ ALL_TESTS = [
     Test('bare', TestBare),
     Test('asm', TestAsm),
     Test('emwasm', TestEmwasm),
-    Test('emtest', TestEmtest, no_windows=True),
-    Test('emtest-asm', TestEmtestAsm2Wasm, no_windows=True),
+    Test('emtest', TestEmtest),
+    Test('emtest-asm', TestEmtestAsm2Wasm),
 ]
 
 
