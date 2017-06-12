@@ -787,7 +787,7 @@ def BuildEnv(build_dir, bin_subdir=False, runtime='Release'):
   return cc_env
 
 
-def LLVM():
+def LLVM(run_tests):
   buildbot.Step('LLVM')
   Mkdir(LLVM_OUT_DIR)
   cc_env = BuildEnv(LLVM_OUT_DIR, bin_subdir=True)
@@ -824,13 +824,14 @@ def LLVM():
     else:
       return proc.check_call(cmd, **kwargs)
 
-  RunWithUnixUtils(['ninja', 'check-all'], cwd=LLVM_OUT_DIR, env=cc_env)
+  if run_tests:
+    RunWithUnixUtils(['ninja', 'check-all'], cwd=LLVM_OUT_DIR, env=cc_env)
   proc.check_call(['ninja', 'install'] + jobs, cwd=LLVM_OUT_DIR, env=cc_env)
 
   CopyLLVMTools(LLVM_OUT_DIR)
 
 
-def V8():
+def V8(run_tests):
   buildbot.Step('V8')
   proc.check_call([os.path.join(V8_SRC_DIR, 'tools', 'dev', 'v8gen.py'),
                    'x64.release'],
@@ -838,9 +839,10 @@ def V8():
   jobs = host_toolchains.NinjaJobs()
   proc.check_call(['ninja', '-v', '-C', V8_OUT_DIR, 'd8', 'unittests'] + jobs,
                   cwd=V8_SRC_DIR)
-  proc.check_call(['tools/run-tests.py', 'unittests', '--no-presubmit',
-                   '--shell-dir', V8_OUT_DIR],
-                  cwd=V8_SRC_DIR)
+  if run_tests:
+    proc.check_call(['tools/run-tests.py', 'unittests', '--no-presubmit',
+                     '--shell-dir', V8_OUT_DIR],
+                    cwd=V8_SRC_DIR)
   to_archive = [Executable('d8'), 'natives_blob.bin', 'snapshot_blob.bin']
   for a in to_archive:
     CopyBinaryToArchive(os.path.join(V8_OUT_DIR, a))
@@ -873,7 +875,7 @@ def Jsc():
     CopyBinaryToArchive(os.path.join(JSC_OUT_DIR, a))
 
 
-def Wabt():
+def Wabt(run_tests):
   buildbot.Step('WABT')
   Mkdir(WABT_OUT_DIR)
   cc_env = BuildEnv(WABT_OUT_DIR)
@@ -884,6 +886,10 @@ def Wabt():
                    '-DBUILD_TESTS=OFF'] + OverrideCMakeCompiler(),
                   cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja'], cwd=WABT_OUT_DIR, env=cc_env)
+  # TODO(sbc): git submodules are not yet fetched so we can't yet endable
+  # wabt tests.
+  # if run_tests:
+  #   proc.check_call(['ninja', 'run-tests'], cwd=WABT_OUT_DIR, env=cc_env)
   proc.check_call(['ninja', 'install'], cwd=WABT_OUT_DIR, env=cc_env)
 
 
@@ -899,14 +905,16 @@ def OCaml():
   proc.check_call(['make', 'install'], cwd=OCAML_DIR)
   ocamlbuild = os.path.join(OCAML_BIN_DIR, 'ocamlbuild')
   assert os.path.isfile(ocamlbuild), 'Expected installed %s' % ocamlbuild
-  os.environ['PATH'] = OCAML_BIN_DIR + os.pathsep + os.environ['PATH']
 
 
-def Spec():
+def Spec(run_tests):
   buildbot.Step('spec')
-  # Spec builds in-tree. Always clobber and run the tests.
+  os.environ['PATH'] = OCAML_BIN_DIR + os.pathsep + os.environ['PATH']
+  # Spec builds in-tree. Always clobber.
   proc.check_call(['make', 'clean'], cwd=ML_DIR)
-  proc.check_call(['make', 'all'], cwd=ML_DIR)
+  proc.check_call(['make', 'opt'], cwd=ML_DIR)
+  if run_tests:
+    proc.check_call(['make', 'test'], cwd=ML_DIR)
   wasm = os.path.join(ML_DIR, 'wasm')
   CopyBinaryToArchive(wasm)
 
@@ -954,7 +962,7 @@ def Fastcomp():
   CopyLLVMTools(FASTCOMP_OUT_DIR, 'fastcomp')
 
 
-def Emscripten(use_asm=True):
+def Emscripten(use_asm):
   buildbot.Step('emscripten')
   # Remove cached library builds (e.g. libc, libc++) to force them to be
   # rebuilt in the step below.
@@ -1233,15 +1241,15 @@ def Summary(repos):
       buildbot.Link('lkgr.json', cloud.Upload(info_file, lkgr_file))
 
 
-def AllBuilds(use_asm=False):
+def AllBuilds(use_asm=False, run_tests=False):
   return [
       # Host tools
-      Build('llvm', LLVM),
-      Build('v8', V8),
+      Build('llvm', LLVM, run_tests=run_tests),
+      Build('v8', V8, run_tests=run_tests),
       Build('jsc', Jsc, no_windows=True, no_linux=True),
-      Build('wabt', Wabt),
+      Build('wabt', Wabt, run_tests=run_tests),
       Build('ocaml', OCaml, no_windows=True),
-      Build('spec', Spec, no_windows=True),
+      Build('spec', Spec, no_windows=True, run_tests=run_tests),
       Build('binaryen', Binaryen),
       Build('fastcomp', Fastcomp),
       Build('emscripten', Emscripten, use_asm=use_asm),
@@ -1253,8 +1261,8 @@ def AllBuilds(use_asm=False):
   ]
 
 
-def BuildRepos(filter, use_asm=False):
-  for rule in filter.Apply(AllBuilds(use_asm)):
+def BuildRepos(filter, use_asm, run_tests):
+  for rule in filter.Apply(AllBuilds(use_asm, run_tests)):
     rule.Run()
 
 
@@ -1473,6 +1481,9 @@ def ParseArgs():
       help='Include only the comma-separated list of test targets')
 
   parser.add_argument(
+      '--no-tool-tests', dest='run_tool_tests', action='store_false',
+      help='Skip the testing of tools (such tools llvm, wabt, v8, spec)')
+  parser.add_argument(
       '--git-status', dest='git_status', default=False, action='store_true',
       help='Show git status for each sync target. '
            "Doesn't sync, build, or test")
@@ -1507,7 +1518,8 @@ def run(sync_filter, build_filter, test_filter, options):
 
   try:
     BuildRepos(build_filter,
-               test_filter.Check('asm') or test_filter.Check('emtest-asm'))
+               test_filter.Check('asm') or test_filter.Check('emtest-asm'),
+               options.run_tool_tests)
   except Exception:
     # If any exception reaches here, do not attempt to run the tests; just
     # log the error for buildbot and exit
